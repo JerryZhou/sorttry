@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <memory.h>
 
 #define _cunused(v) (void)v;
 
@@ -257,6 +258,47 @@ void csort_bubble(long arr[],
 
 //################################################
 //################################################
+// comb sort algorithm
+// 改良版冒泡排序：
+//  类似希尔排序改良插入排序，
+//  定义一个gap, 慢慢缩小gap
+
+static int _csort_comb_gap(int gap) {
+    gap = gap * 10 / 13;
+    if (gap == 9 || gap == 10) {
+        gap = 11;
+    }
+    if (gap < 1) {
+        gap = 1;
+    }
+
+    return gap;
+}
+
+void csort_comb(long arr[], int start, int end, csort_compare_fn compare) {
+    int i;
+    int bub;
+    long tmp;
+    int gap=end - start + 1;
+    for (;;) {
+        bub = 0;
+        gap = _csort_comb_gap(gap);
+        for (i=start; i<=end-gap; i+=gap) {
+            if (compare(arr[i], arr[i+gap]) > 0) {
+                tmp = arr[i];
+                arr[i] = arr[i+gap];
+                arr[i+gap] = tmp;
+                bub++;
+            }
+        }
+        if (bub == 0 && gap == 1) {
+            break;
+        }
+    }
+}
+
+//################################################
+//################################################
 
 
 //static void _csort_reverse(long arr[], int start, int len) {
@@ -497,6 +539,103 @@ void csort_quick3(long arr[], int start, int end, csort_compare_fn compare) {
 
 //################################################
 //################################################
+// Counting Sort Algorithm
+void csort_counting(long arr[], int start, int end, csort_compare_fn compare) {
+    long *sorted = (long*)malloc(sizeof(long)*(end-start+1));
+    long *counting;
+    int i;
+    long tmp;
+    long range;
+
+    long min = arr[start],  max = arr[start]; 
+    // get min and max
+    for (i=start+1; i<=end; ++i) {
+        tmp = arr[i];
+        if (compare(tmp, min) < 0) {
+            min = tmp;
+        } else if (compare(tmp, max) > 0) {
+            max = tmp;
+        }
+    }
+    range = max - min + 1;
+    counting = (long*)calloc(sizeof(long), range);
+    // counting
+    for (i=start; i<=end; ++i) {
+        tmp = arr[i];
+        ++counting[tmp-min];
+    }
+    // caculte the index
+    for (i=1; i<range; ++i) {
+        counting[i] = counting[i] + counting[i-1];
+    }
+    // take the real sorted values
+    for (i=end; i>=start; --i) {
+        tmp = arr[i];
+        sorted[counting[tmp - min]-1] = tmp;
+        --counting[tmp - min];
+    } 
+    // copy to orginal value
+    for (i=start; i<=end; ++i) {
+        arr[i] = sorted[i-start];
+    } 
+    free(sorted);
+    free(counting);
+}
+
+//################################################
+//################################################
+// Radix Sort
+// 基数排序：基数排序是在基数排序基础上发展的
+//  计数排序是一个稳定排序算法
+//  基数排序把数据按照基数进行拆分，对每一位进行比较
+//  value = p0 
+//      + BASE * p1 
+//      + BASE * BASE * p2 
+//      + BASE * BASE * BASE * p3
+//  分别对 p0, p1, p2, p3 位进行计数排序，最后得到的就是结果 
+void csort_radix(long arr[], long base, int start, int end, csort_compare_fn compare) {
+    long max = arr[start];
+    long exp = 1;
+    long index;
+    int i;
+    int *counting = (int*)malloc(sizeof(int)*base);
+    long *sorted = (long*)malloc(sizeof(long)*(end-start+1));
+    long tmp;
+
+    // get the max value
+    for (i=start+1; i<=end; ++i) {
+        if (compare(arr[i], max) > 0 ) {
+            max = arr[i];
+        }
+    }
+
+    // counting sort by radix
+    while(max/exp>0) {
+        memset(counting, 0, sizeof(int)*base);
+        for (i=start; i<=end; ++i) {
+            tmp = arr[i];
+            index = tmp / exp % base;
+            counting[index]++; 
+        }
+        for (i=1; i<base; ++i) {
+            counting[i] = counting[i] + counting[i-1];
+        }
+        for (i=end; i>=start; --i) {
+            tmp = arr[i];
+            index = tmp / exp % base;
+            sorted[counting[index] - 1] = tmp;
+            --counting[index];
+        }
+        for (i=start; i<=end; ++i) {
+            arr[i] = sorted[i-start];
+        }
+
+        exp *= base;
+    }
+}
+
+//################################################
+//################################################
 struct SortTestContext;
 // sort function, return the compare
 typedef void (*csort_fn)(long arr[], int len, csort_compare_fn compare);
@@ -521,11 +660,14 @@ typedef enum CSortEnum {
     CSort_InsertMove,
     CSort_Shell,
     CSort_Bubble,
+    CSort_Comb,
     CSort_Selection,
     CSort_Merge,
     CSort_Heap,
     CSort_Quick,
     CSort_Quick3,
+    CSort_Counting,
+    CSort_Radix,
 
     CSort_Max,
 }CSortEnum;
@@ -670,6 +812,11 @@ static void _csort_fn_bubble(long arr[], int len, csort_compare_fn compare) {
     csort_bubble(arr, 0, len-1, compare);
 }
 
+// Comb Sort Try
+static void _csort_fn_comb(long arr[], int len, csort_compare_fn compare) {
+    csort_comb(arr, 0, len-1, compare);
+}
+
 // Selection Sort Try
 static void _csort_fn_selection(long arr[], int len, csort_compare_fn compare) {
     csort_bubble(arr, 0, len-1, compare);
@@ -695,17 +842,30 @@ static void _csort_fn_quick3(long arr[], int len, csort_compare_fn compare) {
     csort_quick3(arr, 0, len-1, compare);
 }
 
+// Counting Sort Try
+static void _csort_fn_counting(long arr[], int len, csort_compare_fn compare) {
+    csort_counting(arr, 0, len-1, compare);
+}
+
+// Radix Sort Try
+static void _csort_fn_radix(long arr[], int len, csort_compare_fn compare) {
+    csort_radix(arr, 10, 0, len-1, compare);
+}
+
 // Setup It
 void setupAllSortTrys(SortTestContext *context) {
-    addSortTry(context, "insert", _csort_fn_insert, CSort_Insert);
-    addSortTry(context, "insertmove", _csort_fn_insertmove, CSort_InsertMove);
-    addSortTry(context, "shell", _csort_fn_shell, CSort_Shell);
-    addSortTry(context, "bubble", _csort_fn_bubble, CSort_Bubble);
-    addSortTry(context, "selection", _csort_fn_selection, CSort_Selection);
-    addSortTry(context, "merge", _csort_fn_merge, CSort_Merge);
-    addSortTry(context, "heap", _csort_fn_heap, CSort_Heap);
-    addSortTry(context, "quick", _csort_fn_quick, CSort_Quick);
-    addSortTry(context, "quick3", _csort_fn_quick3, CSort_Quick3);
+    addSortTry(context, "insert",       _csort_fn_insert,       CSort_Insert);
+    addSortTry(context, "insertmove",   _csort_fn_insertmove,   CSort_InsertMove);
+    addSortTry(context, "shell",        _csort_fn_shell,        CSort_Shell);
+    addSortTry(context, "bubble",       _csort_fn_bubble,       CSort_Bubble);
+    addSortTry(context, "comb",         _csort_fn_comb,         CSort_Comb);
+    addSortTry(context, "selection",    _csort_fn_selection,    CSort_Selection);
+    addSortTry(context, "merge",        _csort_fn_merge,        CSort_Merge);
+    addSortTry(context, "heap",         _csort_fn_heap,         CSort_Heap);
+    addSortTry(context, "quick",        _csort_fn_quick,        CSort_Quick);
+    addSortTry(context, "quick3",       _csort_fn_quick3,       CSort_Quick3);
+    addSortTry(context, "counting",     _csort_fn_counting,     CSort_Counting);
+    addSortTry(context, "radix",        _csort_fn_radix,        CSort_Radix);
 }
 
 // release all the resource that holded by context
@@ -766,11 +926,11 @@ void testSortTrys(int num, int len) {
 }
 
 void testSimpleSort() {
-    long arr[] = { 6, 2, 9, 4, 8};
+    long arr[] = { 8, 5, 1, 9};
     int cnt = sizeof(arr)/sizeof(arr[0]);
 
     _csort_print(arr, cnt);
-    csort_insertmove(arr, 0, cnt-1, _csort_compare);
+    csort_counting(arr, 0, cnt-1, _csort_compare);
     _csort_print(arr, cnt);
 }
 
@@ -781,7 +941,9 @@ int main(int argc, const char* argv[]) {
     _cunused(argc);
     _cunused(argv);
 
-    testSortTrys(10, 100000);
+    testSortTrys(10, 600);
+
+    // testSimpleSort();
       
     return 0;
 }
